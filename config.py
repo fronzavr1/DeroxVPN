@@ -1,10 +1,15 @@
+print("=== config.py: загрузка начата ===", flush=True)
+
 import pytz
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from environs import Env
 
+print("=== config.py: импорты выполнены ===", flush=True)
+
 env = Env()
 env.read_env('.env')
+print("=== config.py: .env загружен ===", flush=True)
 
 TOKEN = env.str('TOKEN')
 OWNER_ID = env.int('ADMIN')
@@ -18,7 +23,11 @@ DB_NAME = env.str('DB_NAME')
 
 # Теперь берём готовый URL из переменной DATABASE_URL
 DATABASE_URL = env.str('DATABASE_URL')
+print(f"=== config.py: DATABASE_URL загружен: {DATABASE_URL[:30]}... ===", flush=True)
 
 MSK = pytz.timezone('Europe/Moscow')
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
+
+print("=== config.py: bot и dp созданы ===", flush=True)
+print("=== config.py: загрузка завершена ===", flush=True)
