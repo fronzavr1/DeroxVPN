@@ -3,7 +3,7 @@ from typing import Optional
 
 from aiogram import Router, F
 from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardMarkup, CallbackQuery, InlineKeyboardButton, LabeledPrice  # <-- ДОБАВИЛИ CallbackQuery
+from aiogram.types import InlineKeyboardMarkup, CallbackQuery, InlineKeyboardButton, LabeledPrice
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +13,6 @@ from filters.is_private import PrivateChatFilter
 router = Router()
 
 
-# Класс тарифа
 class Tariff:
     def __init__(self, name: str, price: int, duration: str, callback_data):
         self.name = name
@@ -33,7 +32,6 @@ class Tariff:
             return from_date + timedelta(days=365)
 
 
-# Управление тарифами (с возможностью добавить новые)
 class TariffManager:
     def __init__(self):
         self.tariffs = {}
@@ -71,10 +69,16 @@ class TariffManager:
         return self.tariffs.get(tariff_name)
 
     def get_tariff_selection_keyboard(self) -> InlineKeyboardMarkup:
-        inline_keyboard = []
+        inline_keyboard = [
+            [InlineKeyboardButton(text='🎁 Попробовать бесплатно (3 дня)', callback_data='free_trial')],
+            [InlineKeyboardButton(text='🔑 Получить мой код', callback_data='get_code')],
+        ]
         row = []
         for tariff_name, tariff in self.tariffs.items():
-            button = InlineKeyboardButton(text=f'{tariff.name}', callback_data=f'buy_access_{tariff_name}')
+            button = InlineKeyboardButton(
+                text=f'{tariff.name} — {tariff.price} ⭐',
+                callback_data=f'buy_access_{tariff_name}'
+            )
             row.append(button)
             if len(row) == 2:
                 inline_keyboard.append(row)
@@ -83,8 +87,7 @@ class TariffManager:
         if row:
             inline_keyboard.append(row)
 
-        kb = InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
-        return kb
+        return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
     async def update_tariff_price(self, tariff_name: str, new_price: int, session: AsyncSession):
         price_data = await session.scalar(select(PriceData))
@@ -108,17 +111,23 @@ class TariffManager:
         return True
 
     async def send_tariff_selection_message(self, cq: CallbackQuery):
-        text = '<b>💡 Прошу, выберите интересующий вас тариф ниже:</b>'
+        text = '<b>💡 Выберите тариф:</b>\n\n'
+        text += '🎁 <b>Пробный период</b> — 3 дня (бесплатно, 1 раз)\n'
+        text += '🌙 <b>1 месяц</b> — 100 ⭐\n'
+        text += '🌕 <b>6 месяцев</b> — 500 ⭐\n'
+        text += '🌚 <b>1 год</b> — 1000 ⭐\n\n'
+        text += 'Оплата через Telegram Stars.'
 
         keyboard = self.get_tariff_selection_keyboard()
 
         await cq.message.edit_text(text=text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        await cq.answer()
 
     @staticmethod
     async def send_payment_message(cq: CallbackQuery, tariff: Tariff):
         await cq.message.answer_invoice(
             title=f'Подписка: {tariff.name}',
-            description=f'Доступ к приватному каналу на {tariff.duration}',
+            description=f'Доступ к VPN на {tariff.duration}',
             prices=[LabeledPrice(label="XTR", amount=tariff.price)],
             provider_token='',
             currency='XTR',
@@ -150,5 +159,9 @@ async def back_to_tariff_cq(cq: CallbackQuery):
 async def buy_access_cq(cq: CallbackQuery):
     tariff_name = cq.data.split('_')[2]
     tariff = tariff_manager.get_tariff(tariff_name)
+
+    if not tariff:
+        await cq.answer("❌ Тариф не найден")
+        return
 
     await tariff_manager.send_payment_message(cq, tariff)
