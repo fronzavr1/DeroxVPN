@@ -1,12 +1,10 @@
 FROM python:3.13-slim
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+COPY requirements.txt .
 
-RUN uv pip install --system --no-cache -r pyproject.toml
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
