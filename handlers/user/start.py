@@ -1,6 +1,7 @@
 from aiogram import Router, types
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Text
+from aiogram.filters import CommandStart
+from aiogram.filters.text import Text  # <-- ИСПРАВЛЕНО!
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +29,6 @@ async def start(message: Message, session: AsyncSession):
     user_id = message.from_user.id
     fullname = message.from_user.full_name
 
-    # Сохраняем пользователя в БД
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
     if not user:
         user = Users(user_id=user_id, fullname=fullname)
@@ -41,7 +41,6 @@ async def start(message: Message, session: AsyncSession):
         session.add(stats)
         await session.commit()
 
-    # Кнопка "ПОПРОБОВАТЬ БЕСПЛАТНО" (инлайн)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text='🚀 ПОПРОБОВАТЬ БЕСПЛАТНО', callback_data='free_trial')]
@@ -55,8 +54,6 @@ async def start(message: Message, session: AsyncSession):
     """
 
     await message.reply(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-    
-    # Отправляем меню с кнопками внизу
     await message.answer("Меню:", reply_markup=get_main_menu())
 
 
@@ -69,7 +66,6 @@ async def profile_handler(message: Message, session: AsyncSession):
     user_id = message.from_user.id
     name = message.from_user.full_name
     
-    # Получаем данные пользователя из БД
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
     
     if user and user.time_sub:
@@ -104,7 +100,6 @@ async def subscription_handler(message: Message):
 
 Оплата через Telegram Stars.
     """
-    # Инлайн-кнопки для выбора тарифа
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="1 месяц — 100 ⭐", callback_data="tariff_month")],
