@@ -3,30 +3,14 @@ print("=== db/models.py: начало загрузки ===", flush=True)
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import DATABASE_URL
+from db.database import Base, async_session, engine
 
-print(f"=== db/models.py: DATABASE_URL = {DATABASE_URL[:30]}... ===", flush=True)
-
-# Преобразуем синхронный URL в асинхронный
-ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-print("=== db/models.py: URL преобразован ===", flush=True)
-
-# Создаём асинхронный движок
-engine = create_async_engine(ASYNC_DATABASE_URL, echo=True)
-print("=== db/models.py: engine создан ===", flush=True)
-
-Base = declarative_base()
-print("=== db/models.py: Base создан ===", flush=True)
-
-# Создаём фабрику сессий
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-print("=== db/models.py: async_session создан ===", flush=True)
+print("=== db/models.py: импорты из database выполнены ===", flush=True)
 
 
-class DatabaseMiddleware(BaseMiddleware):  # Мидлварь для внедрения сессии базы данных в обработчики
+class DatabaseMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: TelegramObject, data: dict):
         print("=== DatabaseMiddleware: вызов ===", flush=True)
         async with async_session() as session:
@@ -39,9 +23,9 @@ class Users(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, nullable=False)
     fullname = Column(String, nullable=False)
-    tariff = Column(String)  # Купленный тариф
-    time_sub = Column(DateTime(timezone=True))  # Время до окончания подписки
-    link = Column(String)  # Выданная пользователю ссылка
+    tariff = Column(String)
+    time_sub = Column(DateTime(timezone=True))
+    link = Column(String)
 
 
 class PriceData(Base):
@@ -55,8 +39,8 @@ class PriceData(Base):
 class Stats(Base):
     __tablename__ = "stats"
     id = Column(Integer, primary_key=True)
-    total_money = Column(BigInteger, default=0)  # Общая сумма полученных денег
-    monthly_subs = Column(BigInteger, default=0)  # Кол-во купивших за месяц
+    total_money = Column(BigInteger, default=0)
+    monthly_subs = Column(BigInteger, default=0)
     sixmonthly_subs = Column(BigInteger, default=0)
     yearly_subs = Column(BigInteger, default=0)
 
