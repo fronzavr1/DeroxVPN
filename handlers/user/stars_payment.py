@@ -1,7 +1,7 @@
 from aiogram import Router, types
 from aiogram.enums import ParseMode
 from aiogram.types import Message, CallbackQuery, PreCheckoutQuery, LabeledPrice
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 
@@ -21,6 +21,13 @@ DURATIONS = {
     "month": 30,
     "sixmonth": 180,
     "year": 365
+}
+
+# Названия тарифов
+TARIFF_NAMES = {
+    "month": "1 месяц",
+    "sixmonth": "6 месяцев",
+    "year": "1 год"
 }
 
 
@@ -74,22 +81,15 @@ async def tariff_callback(callback: CallbackQuery):
     price = PRICES[tariff_key]
     duration = DURATIONS[tariff_key]
     
-    # Названия тарифов для отображения
-    tariff_names = {
-        "month": "1 месяц",
-        "sixmonth": "6 месяцев",
-        "year": "1 год"
-    }
-    
     # Отправляем инвойс для оплаты Stars
     await callback.message.answer_invoice(
-        title=f"DeroX VPN — {tariff_names[tariff_key]}",
+        title=f"DeroX VPN — {TARIFF_NAMES[tariff_key]}",
         description=f"Доступ к VPN на {duration} дней",
-        payload=tariff_key,  # Передаём ключ тарифа
+        payload=tariff_key,
         provider_token="",
-        currency="XTR",  # Telegram Stars
+        currency="XTR",
         prices=[
-            LabeledPrice(label=tariff_names[tariff_key], amount=price)
+            LabeledPrice(label=TARIFF_NAMES[tariff_key], amount=price)
         ],
         start_parameter="derox_vpn_subscription"
     )
@@ -98,7 +98,6 @@ async def tariff_callback(callback: CallbackQuery):
 
 @router.pre_checkout_query()
 async def pre_checkout_handler(pre_checkout: PreCheckoutQuery):
-    # Всегда подтверждаем оплату
     await pre_checkout.answer(ok=True)
 
 
@@ -109,12 +108,6 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
     
     tariff_key = payment_info.invoice_payload
     duration = DURATIONS.get(tariff_key, 30)
-    
-    tariff_names = {
-        "month": "1 месяц",
-        "sixmonth": "6 месяцев",
-        "year": "1 год"
-    }
     
     # Обновляем подписку пользователя
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
@@ -129,13 +122,13 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
     else:
         user.time_sub = datetime.now() + timedelta(days=duration)
     
-    user.tariff = tariff_names.get(tariff_key, tariff_key)
+    user.tariff = TARIFF_NAMES.get(tariff_key, tariff_key)
     
     await session.commit()
     
     await message.answer(
         f"✅ <b>Оплата прошла успешно!</b>\n\n"
-        f"📦 Тариф: {tariff_names.get(tariff_key, tariff_key)}\n"
+        f"📦 Тариф: {TARIFF_NAMES.get(tariff_key, tariff_key)}\n"
         f"📅 Подписка активна до: <b>{user.time_sub.strftime('%d.%m.%Y %H:%M')}</b>\n\n"
         "Спасибо за покупку! 🎉",
         parse_mode=ParseMode.HTML
