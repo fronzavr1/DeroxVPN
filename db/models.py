@@ -1,3 +1,5 @@
+print("=== db/models.py: начало загрузки ===", flush=True)
+
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime
@@ -6,14 +8,27 @@ from sqlalchemy.ext.declarative import declarative_base
 
 from config import DATABASE_URL
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+print(f"=== db/models.py: DATABASE_URL = {DATABASE_URL[:30]}... ===", flush=True)
+
+# Преобразуем синхронный URL в асинхронный
+ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+print("=== db/models.py: URL преобразован ===", flush=True)
+
+# Создаём асинхронный движок
+engine = create_async_engine(ASYNC_DATABASE_URL, echo=True)
+print("=== db/models.py: engine создан ===", flush=True)
 
 Base = declarative_base()
+print("=== db/models.py: Base создан ===", flush=True)
+
+# Создаём фабрику сессий
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+print("=== db/models.py: async_session создан ===", flush=True)
 
 
 class DatabaseMiddleware(BaseMiddleware):  # Мидлварь для внедрения сессии базы данных в обработчики
     async def __call__(self, handler, event: TelegramObject, data: dict):
+        print("=== DatabaseMiddleware: вызов ===", flush=True)
         async with async_session() as session:
             data["session"] = session
             return await handler(event, data)
@@ -47,5 +62,7 @@ class Stats(Base):
 
 
 async def create_tables():
+    print("=== create_tables(): создание таблиц ===", flush=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    print("=== create_tables(): таблицы созданы ===", flush=True)
