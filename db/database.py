@@ -1,35 +1,28 @@
-print("=== db/models.py: начало загрузки ===", flush=True)
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+print("=== database.py: начало загрузки ===", flush=True)
+
+import os
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
-from config import DATABASE_URL
 
-print(f"=== db/models.py: DATABASE_URL = {DATABASE_URL[:30]}... ===", flush=True)
+# Берём DATABASE_URL напрямую из переменных окружения, без импорта config
+DATABASE_URL = os.getenv('DATABASE_URL')
 
-# Преобразуем синхронный URL в асинхронный
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL не установлен!")
+
+print(f"=== database.py: DATABASE_URL = {DATABASE_URL[:30]}... ===", flush=True)
+
+# Преобразуем в асинхронный URL
 ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-print("=== db/models.py: URL преобразован ===", flush=True)
+print("=== database.py: URL преобразован ===", flush=True)
 
-# Создаём асинхронный движок
 engine = create_async_engine(ASYNC_DATABASE_URL, echo=True)
-print("=== db/models.py: engine создан ===", flush=True)
+print("=== database.py: engine создан ===", flush=True)
 
-# Создаём фабрику сессий
-async_session = async_sessionmaker(engine, expire_on_commit=False)
-print("=== db/models.py: async_session создан ===", flush=True)
-
-# Базовый класс для моделей
 Base = declarative_base()
-print("=== db/models.py: Base создан, загрузка завершена ===", flush=True)
+print("=== database.py: Base создан ===", flush=True)
 
-async def create_tables():
-    print("=== create_tables(): создание таблиц ===", flush=True)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("=== create_tables(): таблицы созданы ===", flush=True)
+async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+print("=== database.py: async_session создан ===", flush=True)
 
-class DatabaseMiddleware:
-    async def __call__(self, handler, event, data):
-        print("=== DatabaseMiddleware: вызов ===", flush=True)
-        async with async_session() as session:
-            data['session'] = session
-            return await handler(event, data)
+print("=== database.py: загрузка завершена ===", flush=True)
