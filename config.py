@@ -11,12 +11,14 @@ OWNER_ID = env.int('ADMIN')
 CHANNEL_ID = env.int('PRIVATE_CHANNEL_ID')
 CHAT_ID = env.int('PRIVATE_CHAT_ID')
 
+# Переменные для базы данных (оставляем на всякий случай)
 DB_USER = env.str('DB_USER')
 DB_PASSWORD = env.str('DB_PASSWORD')
 DB_NAME = env.str('DB_NAME')
 
-DATABASE_URL = f'postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@postgres_db:5432/{DB_NAME}'
+# Теперь берём готовый URL из переменной DATABASE_URL
+DATABASE_URL = env.str('DATABASE_URL')
 
-MSK = pytz.timezone('Europe/Moscow')  # Время по МСК
+MSK = pytz.timezone('Europe/Moscow')
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
