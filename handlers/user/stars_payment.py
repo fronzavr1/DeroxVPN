@@ -6,29 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 
 from db.models import Users
+from handlers.user.tariff import tariff_manager
 
 router = Router()
-
-# Цены за тарифы (в Telegram Stars)
-PRICES = {
-    "month": 100,
-    "sixmonth": 500,
-    "year": 1000
-}
-
-# Длительность тарифов (в днях)
-DURATIONS = {
-    "month": 30,
-    "sixmonth": 180,
-    "year": 365
-}
-
-# Названия тарифов
-TARIFF_NAMES = {
-    "month": "1 месяц",
-    "sixmonth": "6 месяцев",
-    "year": "1 год"
-}
 
 
 @router.callback_query(lambda c: c.data == "free_trial")
@@ -70,32 +50,6 @@ async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("tariff_"))
-async def tariff_callback(callback: CallbackQuery):
-    tariff_key = callback.data.replace("tariff_", "")
-    
-    if tariff_key not in PRICES:
-        await callback.answer("Неверный тариф")
-        return
-    
-    price = PRICES[tariff_key]
-    duration = DURATIONS[tariff_key]
-    
-    # Отправляем инвойс для оплаты Stars
-    await callback.message.answer_invoice(
-        title=f"DeroX VPN — {TARIFF_NAMES[tariff_key]}",
-        description=f"Доступ к VPN на {duration} дней",
-        payload=tariff_key,
-        provider_token="",
-        currency="XTR",
-        prices=[
-            LabeledPrice(label=TARIFF_NAMES[tariff_key], amount=price)
-        ],
-        start_parameter="derox_vpn_subscription"
-    )
-    await callback.answer()
-
-
 @router.pre_checkout_query()
 async def pre_checkout_handler(pre_checkout: PreCheckoutQuery):
     await pre_checkout.answer(ok=True)
@@ -106,8 +60,15 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
     user_id = message.from_user.id
     payment_info = message.successful_payment
     
-    tariff_key = payment_info.invoice_payload
-    duration = DURATIONS.get(tariff_key, 30)
+    # Получаем название тарифа из payload
+    payload = payment_info.invoice_payload
+    tariff_name = payload.split('_')[2]  # sub_123456_month
+    
+    # Получаем тариф из tariff_manager
+    tariff = tariff_manager.get_tariff(tariff_name)
+    if not tariff:
+        await message.answer("❌ Ошибка: тариф не найден")
+        return
     
     # Обновляем подписку пользователя
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
@@ -116,19 +77,21 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
         user = Users(user_id=user_id, fullname=message.from_user.full_name)
         session.add(user)
     
-    # Если уже есть подписка — продлеваем
+    # Вычисляем дату окончания
     if user.time_sub and user.time_sub > datetime.now():
-        user.time_sub = user.time_sub + timedelta(days=duration)
+        # Если уже есть подписка — продлеваем
+        user.time_sub = tariff.get_expiration_date(user.time_sub)
     else:
-        user.time_sub = datetime.now() + timedelta(days=duration)
+        # Иначе начинаем с текущего момента
+        user.time_sub = tariff.get_expiration_date(datetime.now())
     
-    user.tariff = TARIFF_NAMES.get(tariff_key, tariff_key)
+    user.tariff = tariff.name
     
     await session.commit()
     
     await message.answer(
         f"✅ <b>Оплата прошла успешно!</b>\n\n"
-        f"📦 Тариф: {TARIFF_NAMES.get(tariff_key, tariff_key)}\n"
+        f"📦 Тариф: {tariff.name}\n"
         f"📅 Подписка активна до: <b>{user.time_sub.strftime('%d.%m.%Y %H:%M')}</b>\n\n"
         "Спасибо за покупку! 🎉",
         parse_mode=ParseMode.HTML
