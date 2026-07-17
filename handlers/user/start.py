@@ -1,7 +1,7 @@
-from aiogram import Router
+from aiogram import Router, types
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import CommandStart, Text
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,11 +11,24 @@ from filters.is_private import PrivateChatFilter
 router = Router()
 
 
+# Функция для создания главного меню (кнопки внизу экрана)
+def get_main_menu():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="📦 Подписка")],
+            [KeyboardButton(text="👥 Пригласить"), KeyboardButton(text="📜 Правила")],
+            [KeyboardButton(text="🆘 Поддержка"), KeyboardButton(text="💳 CARDS")]
+        ],
+        resize_keyboard=True
+    )
+
+
 @router.message(PrivateChatFilter(), CommandStart())
 async def start(message: Message, session: AsyncSession):
     user_id = message.from_user.id
     fullname = message.from_user.full_name
 
+    # Сохраняем пользователя в БД
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
     if not user:
         user = Users(user_id=user_id, fullname=fullname)
@@ -28,12 +41,126 @@ async def start(message: Message, session: AsyncSession):
         session.add(stats)
         await session.commit()
 
+    # Кнопка "ПОПРОБОВАТЬ БЕСПЛАТНО" (инлайн)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text='🔓 Получить доступ', callback_data='choosing_tariff')]
+            [InlineKeyboardButton(text='🚀 ПОПРОБОВАТЬ БЕСПЛАТНО', callback_data='free_trial')]
         ]
     )
 
-    text = '...'  # Сюда введите свой текст, который бот отправляет при старте
+    text = """
+<b>Valutix Connect</b> - твой безопасный доступ к любимым сервисам.
+
+Просто нажми START ⚡
+    """
 
     await message.reply(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+    
+    # Отправляем меню с кнопками внизу
+    await message.answer("Меню:", reply_markup=get_main_menu())
+
+
+# ============================================
+# ОБРАБОТЧИКИ КНОПОК МЕНЮ
+# ============================================
+
+@router.message(Text("👤 Профиль"))
+async def profile_handler(message: Message, session: AsyncSession):
+    user_id = message.from_user.id
+    name = message.from_user.full_name
+    
+    # Получаем данные пользователя из БД
+    user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
+    
+    if user and user.time_sub:
+        sub_status = f"✅ Активна до: {user.time_sub.strftime('%d.%m.%Y %H:%M')}"
+        tariff_info = f"Тариф: {user.tariff or 'Не указан'}"
+    else:
+        sub_status = "❌ У вас нет оформленной подписки."
+        tariff_info = ""
+    
+    text = f"""
+<b>👤 Профиль:</b>
+ID: {user_id}
+Имя: {name}
+
+<b>📅 Подписка:</b>
+{sub_status}
+{tariff_info}
+
+> Для покупки доступа перейдите в меню «Подписка».
+    """
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+@router.message(Text("📦 Подписка"))
+async def subscription_handler(message: Message):
+    text = """
+<b>📦 Выберите тариф:</b>
+
+🔹 1 месяц — 100 ⭐
+🔹 6 месяцев — 500 ⭐
+🔹 1 год — 1000 ⭐
+
+Оплата через Telegram Stars.
+    """
+    # Инлайн-кнопки для выбора тарифа
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="1 месяц — 100 ⭐", callback_data="tariff_month")],
+            [InlineKeyboardButton(text="6 месяцев — 500 ⭐", callback_data="tariff_sixmonth")],
+            [InlineKeyboardButton(text="1 год — 1000 ⭐", callback_data="tariff_year")]
+        ]
+    )
+    await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+
+
+@router.message(Text("👥 Пригласить"))
+async def invite_handler(message: Message):
+    text = """
+👥 <b>Пригласительная система</b>
+
+Приглашай друзей и получай бонусы!
+
+Скоро здесь появится реферальная программа.
+    """
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+@router.message(Text("📜 Правила"))
+async def rules_handler(message: Message):
+    text = """
+📜 <b>Правила пользования</b>
+
+1. Подписка даёт доступ к каналу на выбранный период
+2. Доступ автоматически продлевается при оплате
+3. При нарушении правил доступ может быть заблокирован
+4. Возврат средств не производится
+
+По всем вопросам обращайтесь в поддержку.
+    """
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+@router.message(Text("🆘 Поддержка"))
+async def support_handler(message: Message):
+    text = """
+🆘 <b>Поддержка</b>
+
+По всем вопросам пишите: @support_username
+
+Или оставьте сообщение, и мы ответим вам в ближайшее время.
+    """
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+@router.message(Text("💳 CARDS"))
+async def cards_handler(message: Message):
+    text = """
+💳 <b>CARDS</b>
+
+Здесь будут ваши карты и способы оплаты.
+
+Функция в разработке.
+    """
+    await message.answer(text, parse_mode=ParseMode.HTML)
