@@ -4,3 +4,4 @@ asyncpg>=0.31.0
 environs>=15.0.1
 pytz>=2026.2
 sqlalchemy>=2.0.51
+psycopg2-binary>=2.9.0
