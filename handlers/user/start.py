@@ -1,7 +1,6 @@
 from aiogram import Router, types
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
-from aiogram.filters.text import Text  # <-- ИСПРАВЛЕНО!
+from aiogram.filters import CommandStart, Text  # <-- ИСПРАВЛЕНО!
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
