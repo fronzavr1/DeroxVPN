@@ -8,4 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "app.py"]
+# Включаем немедленный вывод логов
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "-u", "app.py"]
