@@ -1,6 +1,6 @@
 from aiogram import Router, types
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Text  # <-- ИСПРАВЛЕНО!
+from aiogram.filters import CommandStart
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,10 +57,10 @@ async def start(message: Message, session: AsyncSession):
 
 
 # ============================================
-# ОБРАБОТЧИКИ КНОПОК МЕНЮ
+# ОБРАБОТЧИКИ КНОПОК МЕНЮ (через lambda-фильтры)
 # ============================================
 
-@router.message(Text("👤 Профиль"))
+@router.message(lambda message: message.text == "👤 Профиль")
 async def profile_handler(message: Message, session: AsyncSession):
     user_id = message.from_user.id
     name = message.from_user.full_name
@@ -88,7 +88,7 @@ ID: {user_id}
     await message.answer(text, parse_mode=ParseMode.HTML)
 
 
-@router.message(Text("📦 Подписка"))
+@router.message(lambda message: message.text == "📦 Подписка")
 async def subscription_handler(message: Message):
     text = """
 <b>📦 Выберите тариф:</b>
@@ -109,7 +109,7 @@ async def subscription_handler(message: Message):
     await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 
-@router.message(Text("👥 Пригласить"))
+@router.message(lambda message: message.text == "👥 Пригласить")
 async def invite_handler(message: Message):
     text = """
 👥 <b>Пригласительная система</b>
@@ -121,7 +121,7 @@ async def invite_handler(message: Message):
     await message.answer(text, parse_mode=ParseMode.HTML)
 
 
-@router.message(Text("📜 Правила"))
+@router.message(lambda message: message.text == "📜 Правила")
 async def rules_handler(message: Message):
     text = """
 📜 <b>Правила пользования</b>
@@ -136,7 +136,7 @@ async def rules_handler(message: Message):
     await message.answer(text, parse_mode=ParseMode.HTML)
 
 
-@router.message(Text("🆘 Поддержка"))
+@router.message(lambda message: message.text == "🆘 Поддержка")
 async def support_handler(message: Message):
     text = """
 🆘 <b>Поддержка</b>
@@ -148,7 +148,7 @@ async def support_handler(message: Message):
     await message.answer(text, parse_mode=ParseMode.HTML)
 
 
-@router.message(Text("💳 CARDS"))
+@router.message(lambda message: message.text == "💳 CARDS")
 async def cards_handler(message: Message):
     text = """
 💳 <b>CARDS</b>
