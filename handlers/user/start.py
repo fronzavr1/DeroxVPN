@@ -47,7 +47,11 @@ async def start(message: Message, session: AsyncSession):
     )
 
     text = """
-<b>Valutix Connect</b> - твой безопасный доступ к любимым сервисам.
+<b>DeroX VPN</b> - твой безопасный и быстрый доступ к интернету.
+
+🌍 Безлимитный трафик
+🔒 Анонимность и защита
+⚡ Высокая скорость
 
 Просто нажми START ⚡
     """
@@ -57,7 +61,7 @@ async def start(message: Message, session: AsyncSession):
 
 
 # ============================================
-# ОБРАБОТЧИКИ КНОПОК МЕНЮ (через lambda-фильтры)
+# ОБРАБОТЧИКИ КНОПОК МЕНЮ
 # ============================================
 
 @router.message(lambda message: message.text == "👤 Профиль")
@@ -91,7 +95,7 @@ ID: {user_id}
 @router.message(lambda message: message.text == "📦 Подписка")
 async def subscription_handler(message: Message):
     text = """
-<b>📦 Выберите тариф:</b>
+<b>📦 Выберите тариф DeroX VPN:</b>
 
 🔹 1 месяц — 100 ⭐
 🔹 6 месяцев — 500 ⭐
@@ -112,7 +116,7 @@ async def subscription_handler(message: Message):
 @router.message(lambda message: message.text == "👥 Пригласить")
 async def invite_handler(message: Message):
     text = """
-👥 <b>Пригласительная система</b>
+👥 <b>Пригласительная система DeroX VPN</b>
 
 Приглашай друзей и получай бонусы!
 
@@ -124,9 +128,9 @@ async def invite_handler(message: Message):
 @router.message(lambda message: message.text == "📜 Правила")
 async def rules_handler(message: Message):
     text = """
-📜 <b>Правила пользования</b>
+📜 <b>Правила пользования DeroX VPN</b>
 
-1. Подписка даёт доступ к каналу на выбранный период
+1. Подписка даёт доступ к VPN на выбранный период
 2. Доступ автоматически продлевается при оплате
 3. При нарушении правил доступ может быть заблокирован
 4. Возврат средств не производится
@@ -139,7 +143,7 @@ async def rules_handler(message: Message):
 @router.message(lambda message: message.text == "🆘 Поддержка")
 async def support_handler(message: Message):
     text = """
-🆘 <b>Поддержка</b>
+🆘 <b>Поддержка DeroX VPN</b>
 
 По всем вопросам пишите: @support_username
 
