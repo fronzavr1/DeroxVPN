@@ -2,7 +2,7 @@ print("=== db/models.py: начало загрузки ===", flush=True)
 
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean  # <-- ДОБАВИЛИ Boolean
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import Base, async_session, engine
@@ -25,8 +25,8 @@ class Users(Base):
     fullname = Column(String, nullable=False)
     tariff = Column(String)
     time_sub = Column(DateTime(timezone=True))
-    link = Column(String)
-    trial_used = Column(Boolean, default=False)  # <-- ДОБАВИЛИ ЭТУ СТРОКУ
+    link = Column(String)          # Код активации
+    trial_used = Column(Boolean, default=False)  # Использован ли пробный период
 
 
 class PriceData(Base):
