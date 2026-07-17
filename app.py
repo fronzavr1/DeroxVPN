@@ -23,7 +23,7 @@ print("=== ШАГ 7: Все импорты выполнены ===", flush=True)
 
 logging.getLogger('aiogram').setLevel(logging.INFO)
 
-scheduler = AsyncIOScheduler(timezone='Europe/Moscow')  # Часовой пояс - МСК
+scheduler = AsyncIOScheduler(timezone='Europe/Moscow')
 
 
 async def main():
@@ -51,7 +51,7 @@ async def main():
 
         print("=== ШАГ 15: Удаление webhook ===", flush=True)
         await bot.delete_webhook(drop_pending_updates=True)
-        print(f'=== ШАГ 16: Бот запущен. ===')
+        print('=== ШАГ 16: Бот запущен. ===')
         await dp.start_polling(bot)
     except Exception as e:
         logging.exception(f"Ошибка при запуске бота: {e}")
