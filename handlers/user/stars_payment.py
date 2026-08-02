@@ -13,7 +13,7 @@ from db.models import Users
 router = Router()
 MSK = pytz.timezone('Europe/Moscow')
 
-# 👇 ТВОЙ ЮЗЕРНЕЙМ (без @) — КТО МОЖЕТ БРАТЬ ПРОБНИК БЕСКОНЕЧНО
+# 👇 ТВОЙ ЮЗЕРНЕЙМ (без @)
 ADMIN_USERNAME = "DeroXHelper"
 
 
@@ -30,20 +30,18 @@ async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
     username = callback.from_user.username
     now = now_moscow()
 
-    # ⭐ ЕСЛИ ЭТО АДМИН — ДАЁМ 3 ДНЯ БЕЗ ОГРАНИЧЕНИЙ (сколько угодно раз)
+    # ⭐ ЕСЛИ ЭТО АДМИН — ДАЁМ 3 ДНЯ БЕЗ ОГРАНИЧЕНИЙ
     if username and username.lower() == ADMIN_USERNAME.lower():
         user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
         if not user:
             user = Users(user_id=user_id, fullname=callback.from_user.full_name)
             session.add(user)
 
-        # Каждый раз даём свежие 3 дня
         user.time_sub = now + timedelta(days=3)
         user.tariff = "👑 Админ (пробный 3 дня)"
-        user.trial_used = False  # Чтобы можно было брать снова и снова
+        user.trial_used = False
         await session.commit()
 
-        # Отправляем конфиг
         try:
             config_file = FSInputFile("configs/trial.json", filename="derox_vpn_trial.json")
             await callback.message.answer_document(
@@ -61,7 +59,7 @@ async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
         await callback.answer()
         return
 
-    # ⬇️ ОБЫЧНАЯ ЛОГИКА ДЛЯ ВСЕХ ОСТАЛЬНЫХ ПОЛЬЗОВАТЕЛЕЙ
+    # ⬇️ ОБЫЧНАЯ ЛОГИКА ДЛЯ ВСЕХ ОСТАЛЬНЫХ
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
 
     if user and user.time_sub and user.time_sub > now:
@@ -181,7 +179,7 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
 
 
 # ============================================
-# ПОЛУЧИТЬ КОНФИГ (для админа — всегда работает)
+# ПОЛУЧИТЬ КОНФИГ
 # ============================================
 @router.callback_query(lambda c: c.data == "get_config")
 async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
@@ -191,7 +189,7 @@ async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
 
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
 
-    # Если админ — даём конфиг даже без подписки
+    # Если админ — даём конфиг всегда
     if username and username.lower() == ADMIN_USERNAME.lower():
         if not user:
             user = Users(user_id=user_id, fullname=callback.from_user.full_name)
@@ -201,7 +199,6 @@ async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
             user.trial_used = False
             await session.commit()
 
-        # Если у админа истекло — продлеваем на 3 дня
         if not user.time_sub or user.time_sub <= now:
             user.time_sub = now + timedelta(days=3)
             user.tariff = "👑 Админ (продлен)"
@@ -223,7 +220,7 @@ async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
         await callback.answer()
         return
 
-    # ⬇️ ОБЫЧНАЯ ЛОГИКА ДЛЯ ВСЕХ ОСТАЛЬНЫХ
+    # ⬇️ ОБЫЧНАЯ ЛОГИКА
     if not user or not user.time_sub or user.time_sub <= now:
         await callback.message.answer(
             "❌ У вас нет активной подписки.\n\nОформите подписку в меню «Подписка».",
