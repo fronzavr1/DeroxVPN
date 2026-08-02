@@ -71,7 +71,7 @@ class TariffManager:
     def get_tariff_selection_keyboard(self) -> InlineKeyboardMarkup:
         inline_keyboard = [
             [InlineKeyboardButton(text='🎁 Попробовать бесплатно (3 дня)', callback_data='free_trial')],
-            [InlineKeyboardButton(text='🔑 Получить мой код', callback_data='get_code')],
+            [InlineKeyboardButton(text='🔑 Получить мой конфиг', callback_data='get_config')],
         ]
         row = []
         for tariff_name, tariff in self.tariffs.items():
