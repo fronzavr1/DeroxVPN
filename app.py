@@ -11,7 +11,7 @@ from db.database import async_session
 from db.models import create_tables, DatabaseMiddleware
 from handlers.admin import without_adding_router, stats_router, setprice_router
 from handlers.user import start_router, tariff_router, sub_info_router, expiration_check_router, stars_payment_router
-from handlers.user.tariff import init_tariffs
+from handlers.user.tariff import init_tariffs  # <-- ЭТОТ ИМПОРТ НУЖЕН!
 from handlers.user.expiration_check import check_subscriptions, check_expired_subscriptions
 
 print("=== ШАГ 2: Все импорты выполнены ===", flush=True)
@@ -41,7 +41,7 @@ async def main():
 
     print("=== ШАГ 5: Инициализация тарифов ===", flush=True)
     async with async_session() as session:
-        await init_tariffs(session)
+        await init_tariffs(session)  # <-- ЗДЕСЬ ТОЖЕ ИСПРАВЛЕНО!
     print("=== ШАГ 6: Тарифы инициализированы ===", flush=True)
 
     try:
