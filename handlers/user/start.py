@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from db.models import Users, Stats
 from filters.is_private import PrivateChatFilter
@@ -13,6 +13,22 @@ router = Router()
 
 # 👇 ТВОЙ ЮЗЕРНЕЙМ (без @)
 ADMIN_USERNAME = "DeroXHelper"
+
+
+def get_days_for_tariff(tariff_name: str) -> int:
+    """Возвращает количество дней для тарифа"""
+    if not tariff_name:
+        return 30
+    if "Пробный" in tariff_name or "3 дня" in tariff_name:
+        return 3
+    elif "Месяц" in tariff_name or "месяц" in tariff_name:
+        return 31
+    elif "6 месяцев" in tariff_name or "6 мес" in tariff_name:
+        return 186
+    elif "Год" in tariff_name or "год" in tariff_name:
+        return 365
+    else:
+        return 30
 
 
 def get_main_menu():
@@ -198,16 +214,65 @@ async def support_handler(message: Message):
 
 
 @router.message(lambda message: message.text == "💳 CARDS")
-async def cards_handler(message: Message):
-    text = """
+async def cards_handler(message: Message, session: AsyncSession):
+    user_id = message.from_user.id
+    username = message.from_user.username
+    
+    user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
+    
+    now = datetime.now()
+    
+    # Если админ
+    if username and username.lower() == ADMIN_USERNAME.lower():
+        text = """
+💳 <b>CARDS — Админ</b>
+
+👑 Вы — администратор бота.
+📅 Подписка: бессрочная (можно продлевать через пробный период)
+
+🔄 Нажмите «Пробный период», чтобы обновить доступ.
+        """
+        await message.answer(text, parse_mode=ParseMode.HTML)
+        return
+    
+    # Обычный пользователь
+    if not user or not user.time_sub:
+        text = """
 💳 <b>CARDS</b>
 
-Здесь будут ваши карты и способы оплаты.
+❌ У вас нет активной подписки.
 
-🔹 Подписка активна до: (дата)
-🔹 Тариф: (название)
+📌 Оформите подписку в меню «Подписка».
+        """
+        await message.answer(text, parse_mode=ParseMode.HTML)
+        return
+    
+    if user.time_sub <= now:
+        text = """
+💳 <b>CARDS</b>
 
-Функция в разработке.
+❌ Ваша подписка истекла.
+
+📌 Продлите подписку в меню «Подписка».
+        """
+        await message.answer(text, parse_mode=ParseMode.HTML)
+        return
+    
+    # Активная подписка
+    days = get_days_for_tariff(user.tariff)
+    start_date = user.time_sub - timedelta(days=days)
+    end_date = user.time_sub
+    days_left = (end_date - now).days
+    
+    text = f"""
+💳 <b>CARDS</b>
+
+📦 <b>Тариф:</b> {user.tariff or 'Не указан'}
+📅 <b>Активна с:</b> {start_date.strftime('%d.%m.%Y')}
+📅 <b>Активна до:</b> {end_date.strftime('%d.%m.%Y')}
+⏳ <b>Осталось дней:</b> {days_left}
+
+📌 Чтобы продлить подписку, перейдите в меню «Подписка».
     """
     await message.answer(text, parse_mode=ParseMode.HTML)
 
