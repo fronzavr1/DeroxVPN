@@ -5,8 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 import pytz
-import secrets
-import string
 
 from db.models import Users
 
@@ -30,36 +28,50 @@ async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
     username = callback.from_user.username
     now = now_moscow()
 
-    # ⭐ ЕСЛИ ЭТО АДМИН — ДАЁМ 3 ДНЯ БЕЗ ОГРАНИЧЕНИЙ
+    print(f"🔥 free_trial_handler ВЫЗВАН! user_id={user_id}, username={username}")
+
+    # ⭐ ЕСЛИ ЭТО АДМИН
     if username and username.lower() == ADMIN_USERNAME.lower():
-        user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
-        if not user:
-            user = Users(user_id=user_id, fullname=callback.from_user.full_name)
-            session.add(user)
-
-        user.time_sub = now + timedelta(days=3)
-        user.tariff = "👑 Админ (пробный 3 дня)"
-        user.trial_used = False
-        await session.commit()
-
+        print(f"✅ АДМИН ОПОЗНАН! {username}")
         try:
-            config_file = FSInputFile("configs/trial.json", filename="derox_vpn_trial.json")
-            await callback.message.answer_document(
-                document=config_file,
-                caption=f"👑 <b>Админский пробный период активирован!</b>\n\n"
-                        f"✅ Доступ на <b>3 дня</b>\n"
-                        f"📅 Активен до: <b>{(now + timedelta(days=3)).strftime('%d.%m.%Y %H:%M')}</b>\n\n"
-                        f"📥 Скачайте файл и импортируйте в VPN.\n"
-                        f"🔄 Можно активировать снова в любой момент.",
-                parse_mode=ParseMode.HTML
-            )
-        except FileNotFoundError:
-            await callback.message.answer("❌ Ошибка: файл конфига не найден.")
+            user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
+            if not user:
+                user = Users(user_id=user_id, fullname=callback.from_user.full_name)
+                session.add(user)
 
-        await callback.answer()
-        return
+            user.time_sub = now + timedelta(days=3)
+            user.tariff = "👑 Админ (пробный 3 дня)"
+            user.trial_used = False
+            await session.commit()
+            print(f"✅ Админу {username} выдан пробный период до {user.time_sub}")
+
+            try:
+                config_file = FSInputFile("configs/trial.json", filename="derox_vpn_trial.json")
+                await callback.message.answer_document(
+                    document=config_file,
+                    caption=f"👑 <b>Админский пробный период активирован!</b>\n\n"
+                            f"✅ Доступ на <b>3 дня</b>\n"
+                            f"📅 Активен до: <b>{(now + timedelta(days=3)).strftime('%d.%m.%Y %H:%M')}</b>\n\n"
+                            f"📥 Скачайте файл и импортируйте в VPN.\n"
+                            f"🔄 Можно активировать снова в любой момент.",
+                    parse_mode=ParseMode.HTML
+                )
+                print("✅ Конфиг отправлен админу")
+            except FileNotFoundError:
+                await callback.message.answer("❌ Ошибка: файл конфига не найден.")
+                print("❌ Файл configs/trial.json не найден!")
+
+            await callback.answer()
+            return
+
+        except Exception as e:
+            print(f"❌ ОШИБКА В БЛОКЕ АДМИНА: {e}")
+            await callback.message.answer(f"❌ Ошибка: {e}")
+            await callback.answer()
+            return
 
     # ⬇️ ОБЫЧНАЯ ЛОГИКА ДЛЯ ВСЕХ ОСТАЛЬНЫХ
+    print(f"Обычный пользователь {user_id}")
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
 
     if user and user.time_sub and user.time_sub > now:
