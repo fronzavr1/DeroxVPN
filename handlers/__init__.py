@@ -1,5 +1,8 @@
-from .start import router as start_router
-from .tariff import router as tariff_router
-from .sub_info import router as sub_info_router
-from .expiration_check import router as expiration_check_router
-from .stars_payment import router as stars_payment_router
+from .admin import without_adding_router
+from .admin import stats_router
+from .admin import setprice_router
+from .user import start_router
+from .user import tariff_router
+from .user import sub_info_router
+from .user import expiration_check_router
+from .user import stars_payment_router
