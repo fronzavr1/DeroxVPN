@@ -1,305 +1,202 @@
 from aiogram import Router, types
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, CallbackQuery, PreCheckoutQuery, LabeledPrice, FSInputFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
+import pytz
 
-from db.models import Users, Stats
-from filters.is_private import PrivateChatFilter
+from db.models import Users
 
 router = Router()
+MSK = pytz.timezone('Europe/Moscow')
 
 # 👇 ТВОЙ ЮЗЕРНЕЙМ (без @)
 ADMIN_USERNAME = "DeroXHelper"
 
 
-def get_days_for_tariff(tariff_name: str) -> int:
-    """Возвращает количество дней для тарифа"""
-    if not tariff_name:
-        return 30
-    if "Пробный" in tariff_name or "3 дня" in tariff_name:
-        return 3
-    elif "Месяц" in tariff_name or "месяц" in tariff_name:
-        return 31
-    elif "6 месяцев" in tariff_name or "6 мес" in tariff_name:
-        return 186
-    elif "Год" in tariff_name or "год" in tariff_name:
-        return 365
-    else:
-        return 30
+def now_moscow():
+    return datetime.now(MSK)
 
 
-def get_main_menu():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="🛒 Купить подписку")],  # <-- ИЗМЕНЕНО!
-            [KeyboardButton(text="👥 Пригласить"), KeyboardButton(text="📜 Правила")],
-            [KeyboardButton(text="🆘 Поддержка"), KeyboardButton(text="📋 Моя подписка")]
-        ],
-        resize_keyboard=True
+# ============================================
+# ПРОБНЫЙ ПЕРИОД
+# ============================================
+@router.callback_query(lambda c: c.data == "free_trial")
+async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
+    user_id = callback.from_user.id
+    username = callback.from_user.username
+    now = now_moscow()
+
+    print(f"🔥 free_trial_handler ВЫЗВАН! user_id={user_id}, username={username}")
+
+    # ⭐ ЕСЛИ ЭТО АДМИН
+    if username and username.lower() == ADMIN_USERNAME.lower():
+        print(f"✅ АДМИН ОПОЗНАН! {username}")
+        try:
+            user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
+            if not user:
+                user = Users(
+                    user_id=user_id,
+                    fullname=callback.from_user.full_name,
+                    trial_used=False
+                )
+                session.add(user)
+
+            user.time_sub = now + timedelta(days=3)
+            user.tariff = "👑 Админ (пробный 3 дня)"
+            user.trial_used = False
+            await session.commit()
+            print(f"✅ Админу {username} выдан пробный период до {user.time_sub}")
+
+            try:
+                config_file = FSInputFile("configs/trial.json", filename="derox_vpn_trial.json")
+                await callback.message.answer_document(
+                    document=config_file,
+                    caption=f"👑 <b>Админский пробный период активирован!</b>\n\n"
+                            f"✅ Доступ на <b>3 дня</b>\n"
+                            f"📅 Активен до: <b>{(now + timedelta(days=3)).strftime('%d.%m.%Y %H:%M')}</b>\n\n"
+                            f"📥 Скачайте файл и импортируйте в VPN.\n"
+                            f"🔄 Можно активировать снова в любой момент.",
+                    parse_mode=ParseMode.HTML
+                )
+                print("✅ Конфиг отправлен админу")
+            except FileNotFoundError:
+                await callback.message.answer("❌ Ошибка: файл конфига не найден.")
+                print("❌ Файл configs/trial.json не найден!")
+
+            await callback.answer()
+            return
+
+        except Exception as e:
+            print(f"❌ ОШИБКА В БЛОКЕ АДМИНА: {e}")
+            await callback.message.answer(f"❌ Ошибка: {e}")
+            await callback.answer()
+            return
+
+    # ⬇️ ОБЫЧНАЯ ЛОГИКА ДЛЯ ВСЕХ ОСТАЛЬНЫХ
+    print(f"Обычный пользователь {user_id}")
+    user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
+
+    if user and user.time_sub and user.time_sub > now:
+        await callback.message.answer("❌ У вас уже есть активная подписка!")
+        await callback.answer()
+        return
+
+    if user and user.trial_used:
+        await callback.message.answer("❌ Вы уже использовали пробный период!")
+        await callback.answer()
+        return
+
+    if not user:
+        user = Users(
+            user_id=user_id,
+            fullname=callback.from_user.full_name,
+            trial_used=False
+        )
+        session.add(user)
+
+    user.time_sub = now + timedelta(days=3)
+    user.tariff = "Пробный (3 дня)"
+    user.trial_used = True
+    await session.commit()
+
+    try:
+        config_file = FSInputFile("configs/trial.json", filename="derox_vpn_trial.json")
+        await callback.message.answer_document(
+            document=config_file,
+            caption=f"🎉 <b>Пробный период активирован!</b>\n\n"
+                    f"✅ Доступ на <b>3 дня</b>\n"
+                    f"📅 Активен до: <b>{(now + timedelta(days=3)).strftime('%d.%m.%Y %H:%M')}</b>\n\n"
+                    f"📥 Скачайте файл и импортируйте в ваше VPN-приложение.",
+            parse_mode=ParseMode.HTML
+        )
+    except FileNotFoundError:
+        await callback.message.answer("❌ Ошибка: файл конфига не найден.")
+
+    await callback.answer()
+
+
+# ============================================
+# ОПЛАТА STARS
+# ============================================
+@router.callback_query(lambda c: c.data.startswith("tariff_"))
+async def tariff_callback(callback: CallbackQuery):
+    tariff_key = callback.data.replace("tariff_", "")
+
+    tariff_map = {
+        "month":    {"days": 31,  "price": 100, "name": "🌙 1 месяц"},
+        "sixmonth": {"days": 186, "price": 500, "name": "🌕 6 месяцев"},
+        "year":     {"days": 365, "price": 1000, "name": "🌚 1 год"}
+    }
+
+    tariff = tariff_map.get(tariff_key)
+    if not tariff:
+        await callback.answer("❌ Неверный тариф")
+        return
+
+    await callback.message.answer_invoice(
+        title=f"DeroX VPN — {tariff['name']}",
+        description=f"Доступ к VPN на {tariff['days']} дней",
+        payload=tariff_key,
+        provider_token="",
+        currency="XTR",
+        prices=[LabeledPrice(label=tariff['name'], amount=tariff['price'])],
+        start_parameter="derox_vpn_subscription"
     )
+    await callback.answer()
 
 
-@router.message(PrivateChatFilter(), CommandStart())
-async def start(message: Message, session: AsyncSession):
+@router.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout: PreCheckoutQuery):
+    await pre_checkout.answer(ok=True)
+
+
+@router.message(lambda message: message.successful_payment)
+async def successful_payment_handler(message: Message, session: AsyncSession):
     user_id = message.from_user.id
-    fullname = message.from_user.full_name
+    payment_info = message.successful_payment
+    now = now_moscow()
+
+    tariff_key = payment_info.invoice_payload
+
+    tariff_map = {
+        "month":    {"days": 31,  "file": "configs/month.json",   "name": "🌙 1 месяц"},
+        "sixmonth": {"days": 186, "file": "configs/sixmonth.json", "name": "🌕 6 месяцев"},
+        "year":     {"days": 365, "file": "configs/year.json",    "name": "🌚 1 год"}
+    }
+
+    tariff = tariff_map.get(tariff_key)
+    if not tariff:
+        await message.answer("❌ Ошибка: тариф не найден")
+        return
 
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
     if not user:
-        user = Users(user_id=user_id, fullname=fullname)
+        user = Users(
+            user_id=user_id,
+            fullname=message.from_user.full_name,
+            trial_used=False
+        )
         session.add(user)
-        await session.commit()
 
-    stats = (await session.execute(select(Stats).where(Stats.id == 1))).scalar_one_or_none()
-    if not stats:
-        stats = Stats()
-        session.add(stats)
-        await session.commit()
-
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text='🚀 ПОПРОБОВАТЬ БЕСПЛАТНО', callback_data='free_trial')]
-        ]
-    )
-
-    text = """
-<b>DeroX VPN</b> — твой безопасный и быстрый доступ к интернету.
-
-🌍 Безлимитный трафик
-🔒 Анонимность и защита
-⚡ Высокая скорость
-
-Просто нажми START ⚡
-    """
-
-    await message.reply(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-    await message.answer("Выберите действие:", reply_markup=get_main_menu())
-
-
-# ============================================
-# ОБРАБОТЧИКИ КНОПОК ГЛАВНОГО МЕНЮ
-# ============================================
-
-@router.message(lambda message: message.text == "👤 Профиль")
-async def profile_handler(message: Message, session: AsyncSession):
-    user_id = message.from_user.id
-    username = message.from_user.username
-    name = message.from_user.full_name
-    
-    user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
-    
-    now = datetime.now()
-    
-    # Если это админ
-    if username and username.lower() == ADMIN_USERNAME.lower():
-        sub_status = "👑 Администратор"
-        tariff_info = "📦 Тариф: Админский доступ"
-        if user and user.time_sub:
-            sub_status = f"👑 Активен до: {user.time_sub.strftime('%d.%m.%Y %H:%M')}"
-        
-        text = f"""
-<b>👤 Профиль</b>
-ID: {user_id}
-Имя: {name}
-
-<b>📅 Подписка:</b>
-{sub_status}
-{tariff_info}
-
-🔑 Вы — администратор бота.
-        """
-        await message.answer(text, parse_mode=ParseMode.HTML)
-        return
-    
-    # Обычный пользователь
-    if user and user.time_sub and user.time_sub > now:
-        sub_status = f"✅ Активна до: {user.time_sub.strftime('%d.%m.%Y %H:%M')}"
-        tariff_info = f"📦 Тариф: {user.tariff or 'Не указан'}"
+    if user.time_sub and user.time_sub > now:
+        user.time_sub = user.time_sub + timedelta(days=tariff["days"])
     else:
-        sub_status = "❌ У вас нет активной подписки"
-        tariff_info = ""
-    
-    text = f"""
-<b>👤 Профиль</b>
-ID: {user_id}
-Имя: {name}
+        user.time_sub = now + timedelta(days=tariff["days"])
 
-<b>📅 Подписка:</b>
-{sub_status}
-{tariff_info}
+    user.tariff = tariff["name"]
+    await session.commit()
 
-> Для покупки доступа перейдите в меню «🛒 Купить подписку».
-    """
-    await message.answer(text, parse_mode=ParseMode.HTML)
-
-
-@router.message(lambda message: message.text == "🛒 Купить подписку")
-async def subscription_handler(message: Message):
-    text = """
-<b>💡 Выберите тариф:</b>
-
-🎁 <b>Пробный период</b> — 3 дня (бесплатно, 1 раз)
-🌙 <b>1 месяц</b> — 100 ⭐
-🌕 <b>6 месяцев</b> — 500 ⭐
-🌚 <b>1 год</b> — 1000 ⭐
-
-Оплата через Telegram Stars.
-    """
-    
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🎁 Пробный период (3 дня)", callback_data="free_trial")],
-            [InlineKeyboardButton(text="🌙 1 месяц — 100 ⭐", callback_data="tariff_month")],
-            [InlineKeyboardButton(text="🌕 6 месяцев — 500 ⭐", callback_data="tariff_sixmonth")],
-            [InlineKeyboardButton(text="🌚 1 год — 1000 ⭐", callback_data="tariff_year")]
-        ]
-    )
-    
-    await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-
-
-@router.message(lambda message: message.text == "👥 Пригласить")
-async def invite_handler(message: Message):
-    text = f"""
-👥 <b>Пригласительная система</b>
-
-Приглашай друзей и получай бонусы!
-
-🔗 Твоя реферальная ссылка:
-<code>https://t.me/DeroXVPN_bot?start=ref_{message.from_user.id}</code>
-
-Скоро здесь появится полноценная реферальная программа.
-    """
-    await message.answer(text, parse_mode=ParseMode.HTML)
-
-
-@router.message(lambda message: message.text == "📜 Правила")
-async def rules_handler(message: Message):
-    text = """
-📜 <b>Правила пользования DeroX VPN</b>
-
-1. Подписка даёт доступ к VPN на выбранный период
-2. Доступ автоматически продлевается при оплате
-3. При нарушении правил доступ может быть заблокирован
-4. Возврат средств не производится
-5. Запрещено использовать VPN для незаконных действий
-
-По всем вопросам обращайтесь в поддержку.
-    """
-    await message.answer(text, parse_mode=ParseMode.HTML)
-
-
-@router.message(lambda message: message.text == "🆘 Поддержка")
-async def support_handler(message: Message):
-    text = f"""
-🆘 <b>Поддержка DeroX VPN</b>
-
-По всем вопросам пишите нашему менеджеру:
-👉 <b>@{ADMIN_USERNAME}</b>
-
-Или нажмите кнопку ниже, чтобы написать в поддержку.
-    """
-    
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📩 Написать в поддержку", url=f"https://t.me/{ADMIN_USERNAME}")],
-            [InlineKeyboardButton(text="📖 Часто задаваемые вопросы", callback_data="faq")]
-        ]
-    )
-    
-    await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
-
-
-# ============================================
-# 📋 МОЯ ПОДПИСКА
-# ============================================
-@router.message(lambda message: message.text == "📋 Моя подписка")
-async def my_subscription_handler(message: Message, session: AsyncSession):
-    user_id = message.from_user.id
-    username = message.from_user.username
-    
-    user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
-    
-    now = datetime.now()
-    
-    # Если админ
-    if username and username.lower() == ADMIN_USERNAME.lower():
-        text = """
-📋 <b>Моя подписка — Админ</b>
-
-👑 Вы — администратор бота.
-📅 Подписка: бессрочная (можно продлевать через пробный период)
-
-🔄 Нажмите «Пробный период», чтобы обновить доступ.
-        """
-        await message.answer(text, parse_mode=ParseMode.HTML)
-        return
-    
-    # Обычный пользователь
-    if not user or not user.time_sub:
-        text = """
-📋 <b>Моя подписка</b>
-
-❌ У вас нет активной подписки.
-
-📌 Оформите подписку в меню «🛒 Купить подписку».
-        """
-        await message.answer(text, parse_mode=ParseMode.HTML)
-        return
-    
-    if user.time_sub <= now:
-        text = """
-📋 <b>Моя подписка</b>
-
-❌ Ваша подписка истекла.
-
-📌 Продлите подписку в меню «🛒 Купить подписку».
-        """
-        await message.answer(text, parse_mode=ParseMode.HTML)
-        return
-    
-    # Активная подписка
-    days = get_days_for_tariff(user.tariff)
-    start_date = user.time_sub - timedelta(days=days)
-    end_date = user.time_sub
-    days_left = (end_date - now).days
-    
-    text = f"""
-📋 <b>Моя подписка</b>
-
-📦 <b>Тариф:</b> {user.tariff or 'Не указан'}
-📅 <b>Активна с:</b> {start_date.strftime('%d.%m.%Y')}
-📅 <b>Активна до:</b> {end_date.strftime('%d.%m.%Y')}
-⏳ <b>Осталось дней:</b> {days_left}
-
-📌 Чтобы продлить подписку, перейдите в меню «🛒 Купить подписку».
-    """
-    await message.answer(text, parse_mode=ParseMode.HTML)
-
-
-# ============================================
-# ДОПОЛНИТЕЛЬНЫЕ ОБРАБОТЧИКИ
-# ============================================
-
-@router.callback_query(lambda c: c.data == "faq")
-async def faq_handler(callback: types.CallbackQuery):
-    text = """
-📖 <b>Часто задаваемые вопросы</b>
-
-❓ <b>Как активировать подписку?</b>
-Оплатите тариф в меню «🛒 Купить подписку» и скачайте конфиг.
-
-❓ <b>Что делать, если конфиг не работает?</b>
-Напишите в поддержку — мы поможем.
-
-❓ <b>Можно ли вернуть деньги?</b>
-Возврат средств не производится.
-
-❓ <b>Сколько устройств можно подключить?</b>
-Один конфиг = одно устройство.
-    """
-    await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
-    await callback.answer()
+    try:
+        config_file = FSInputFile(tariff["file"], filename=f"derox_vpn_{tariff_key}.json")
+        await message.answer_document(
+            document=config_file,
+            caption=f"✅ <b>Оплата прошла успешно!</b>\n\n"
+                    f"📦 Тариф: {tariff['name']}\n"
+                    f"📅 Подписка активна до: <b>{user.time_sub.strftime('%d.%m.%Y %H:%M')}</b>\n\n"
+                    f"📥 Скачайте файл и импортируйте в ваше VPN-приложение.",
+            parse_mode=ParseMode.HTML
+        )
+    except FileNotFoundError:
+        await message.answer("❌ Ошибка: файл конфига не найден.")
