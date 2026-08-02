@@ -36,7 +36,11 @@ async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
         try:
             user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
             if not user:
-                user = Users(user_id=user_id, fullname=callback.from_user.full_name)
+                user = Users(
+                    user_id=user_id,
+                    fullname=callback.from_user.full_name,
+                    trial_used=False
+                )
                 session.add(user)
 
             user.time_sub = now + timedelta(days=3)
@@ -85,7 +89,11 @@ async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
         return
 
     if not user:
-        user = Users(user_id=user_id, fullname=callback.from_user.full_name)
+        user = Users(
+            user_id=user_id,
+            fullname=callback.from_user.full_name,
+            trial_used=False
+        )
         session.add(user)
 
     user.time_sub = now + timedelta(days=3)
@@ -165,7 +173,11 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
 
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
     if not user:
-        user = Users(user_id=user_id, fullname=message.from_user.full_name)
+        user = Users(
+            user_id=user_id,
+            fullname=message.from_user.full_name,
+            trial_used=False
+        )
         session.add(user)
 
     if user.time_sub and user.time_sub > now:
@@ -188,78 +200,3 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
         )
     except FileNotFoundError:
         await message.answer("❌ Ошибка: файл конфига не найден.")
-
-
-# ============================================
-# ПОЛУЧИТЬ КОНФИГ
-# ============================================
-@router.callback_query(lambda c: c.data == "get_config")
-async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
-    user_id = callback.from_user.id
-    username = callback.from_user.username
-    now = now_moscow()
-
-    user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
-
-    # Если админ — даём конфиг всегда
-    if username and username.lower() == ADMIN_USERNAME.lower():
-        if not user:
-            user = Users(user_id=user_id, fullname=callback.from_user.full_name)
-            session.add(user)
-            user.time_sub = now + timedelta(days=3)
-            user.tariff = "👑 Админ (пробный)"
-            user.trial_used = False
-            await session.commit()
-
-        if not user.time_sub or user.time_sub <= now:
-            user.time_sub = now + timedelta(days=3)
-            user.tariff = "👑 Админ (продлен)"
-            await session.commit()
-
-        try:
-            config_file = FSInputFile("configs/trial.json", filename=f"derox_vpn_admin.json")
-            await callback.message.answer_document(
-                document=config_file,
-                caption=f"👑 <b>Админский конфиг</b>\n\n"
-                        f"📦 Тариф: {user.tariff}\n"
-                        f"📅 Активен до: <b>{user.time_sub.strftime('%d.%m.%Y %H:%M')}</b>\n\n"
-                        f"🔄 Можно обновить в любой момент.",
-                parse_mode=ParseMode.HTML
-            )
-        except FileNotFoundError:
-            await callback.message.answer("❌ Ошибка: файл конфига не найден.")
-
-        await callback.answer()
-        return
-
-    # ⬇️ ОБЫЧНАЯ ЛОГИКА
-    if not user or not user.time_sub or user.time_sub <= now:
-        await callback.message.answer(
-            "❌ У вас нет активной подписки.\n\nОформите подписку в меню «Подписка».",
-            parse_mode=ParseMode.HTML
-        )
-        await callback.answer()
-        return
-
-    tariff_map = {
-        "🌙 1 месяц": "month.json",
-        "🌕 6 месяцев": "sixmonth.json",
-        "🌚 1 год": "year.json",
-        "Пробный (3 дня)": "trial.json"
-    }
-
-    filename = tariff_map.get(user.tariff, "trial.json")
-
-    try:
-        config_file = FSInputFile(f"configs/{filename}", filename=f"derox_vpn_{user.user_id}.json")
-        await callback.message.answer_document(
-            document=config_file,
-            caption=f"🔑 <b>Ваш конфиг</b>\n\n"
-                    f"📦 Тариф: {user.tariff}\n"
-                    f"📅 Активен до: <b>{user.time_sub.strftime('%d.%m.%Y %H:%M') if user.time_sub else 'Не указано'}</b>",
-            parse_mode=ParseMode.HTML
-        )
-    except FileNotFoundError:
-        await callback.message.answer("❌ Ошибка: файл конфига не найден.")
-
-    await callback.answer()
