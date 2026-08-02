@@ -34,9 +34,9 @@ def get_days_for_tariff(tariff_name: str) -> int:
 def get_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="📦 Подписка")],
+            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="🛒 Купить подписку")],  # <-- ИЗМЕНЕНО!
             [KeyboardButton(text="👥 Пригласить"), KeyboardButton(text="📜 Правила")],
-            [KeyboardButton(text="🆘 Поддержка"), KeyboardButton(text="💳 CARDS")]
+            [KeyboardButton(text="🆘 Поддержка"), KeyboardButton(text="📋 Моя подписка")]
         ],
         resize_keyboard=True
     )
@@ -131,12 +131,12 @@ ID: {user_id}
 {sub_status}
 {tariff_info}
 
-> Для покупки доступа перейдите в меню «Подписка».
+> Для покупки доступа перейдите в меню «🛒 Купить подписку».
     """
     await message.answer(text, parse_mode=ParseMode.HTML)
 
 
-@router.message(lambda message: message.text == "📦 Подписка")
+@router.message(lambda message: message.text == "🛒 Купить подписку")
 async def subscription_handler(message: Message):
     text = """
 <b>💡 Выберите тариф:</b>
@@ -213,8 +213,11 @@ async def support_handler(message: Message):
     await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 
-@router.message(lambda message: message.text == "💳 CARDS")
-async def cards_handler(message: Message, session: AsyncSession):
+# ============================================
+# 📋 МОЯ ПОДПИСКА
+# ============================================
+@router.message(lambda message: message.text == "📋 Моя подписка")
+async def my_subscription_handler(message: Message, session: AsyncSession):
     user_id = message.from_user.id
     username = message.from_user.username
     
@@ -225,7 +228,7 @@ async def cards_handler(message: Message, session: AsyncSession):
     # Если админ
     if username and username.lower() == ADMIN_USERNAME.lower():
         text = """
-💳 <b>CARDS — Админ</b>
+📋 <b>Моя подписка — Админ</b>
 
 👑 Вы — администратор бота.
 📅 Подписка: бессрочная (можно продлевать через пробный период)
@@ -238,22 +241,22 @@ async def cards_handler(message: Message, session: AsyncSession):
     # Обычный пользователь
     if not user or not user.time_sub:
         text = """
-💳 <b>CARDS</b>
+📋 <b>Моя подписка</b>
 
 ❌ У вас нет активной подписки.
 
-📌 Оформите подписку в меню «Подписка».
+📌 Оформите подписку в меню «🛒 Купить подписку».
         """
         await message.answer(text, parse_mode=ParseMode.HTML)
         return
     
     if user.time_sub <= now:
         text = """
-💳 <b>CARDS</b>
+📋 <b>Моя подписка</b>
 
 ❌ Ваша подписка истекла.
 
-📌 Продлите подписку в меню «Подписка».
+📌 Продлите подписку в меню «🛒 Купить подписку».
         """
         await message.answer(text, parse_mode=ParseMode.HTML)
         return
@@ -265,14 +268,14 @@ async def cards_handler(message: Message, session: AsyncSession):
     days_left = (end_date - now).days
     
     text = f"""
-💳 <b>CARDS</b>
+📋 <b>Моя подписка</b>
 
 📦 <b>Тариф:</b> {user.tariff or 'Не указан'}
 📅 <b>Активна с:</b> {start_date.strftime('%d.%m.%Y')}
 📅 <b>Активна до:</b> {end_date.strftime('%d.%m.%Y')}
 ⏳ <b>Осталось дней:</b> {days_left}
 
-📌 Чтобы продлить подписку, перейдите в меню «Подписка».
+📌 Чтобы продлить подписку, перейдите в меню «🛒 Купить подписку».
     """
     await message.answer(text, parse_mode=ParseMode.HTML)
 
@@ -287,7 +290,7 @@ async def faq_handler(callback: types.CallbackQuery):
 📖 <b>Часто задаваемые вопросы</b>
 
 ❓ <b>Как активировать подписку?</b>
-Оплатите тариф в меню «Подписка» и скачайте конфиг.
+Оплатите тариф в меню «🛒 Купить подписку» и скачайте конфиг.
 
 ❓ <b>Что делать, если конфиг не работает?</b>
 Напишите в поддержку — мы поможем.
