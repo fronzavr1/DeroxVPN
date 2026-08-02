@@ -22,7 +22,7 @@ def now_moscow():
 
 
 # ============================================
-# ПРОБНЫЙ ПЕРИОД (с вечным доступом для админа)
+# ПРОБНЫЙ ПЕРИОД (для админа — бесконечно, 3 дня каждый раз)
 # ============================================
 @router.callback_query(lambda c: c.data == "free_trial")
 async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
@@ -30,31 +30,38 @@ async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
     username = callback.from_user.username
     now = now_moscow()
 
-    # ⭐ ЕСЛИ ЭТО АДМИН — ДАЁМ ВЕЧНЫЙ ДОСТУП БЕЗ ПРОВЕРОК
+    # ⭐ ЕСЛИ ЭТО АДМИН — ДАЁМ 3 ДНЯ, НО БЕЗ ОГРАНИЧЕНИЙ
     if username and username.lower() == ADMIN_USERNAME.lower():
         user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
         if not user:
             user = Users(user_id=user_id, fullname=callback.from_user.full_name)
             session.add(user)
 
-        # Вечный доступ (условно — 100 лет)
-        user.time_sub = now + timedelta(days=365 * 100)
-        user.tariff = "👑 Вечный админский доступ"
-        user.trial_used = True
+        # Даём 3 дня (каждый раз заново, без проверок)
+        user.time_sub = now + timedelta(days=3)
+        user.tariff = "👑 Админ (пробный 3 дня)"
+        user.trial_used = False  # Чтобы всегда мог брать снова
         await session.commit()
 
-        await callback.message.answer(
-            "👑 <b>Вечный доступ активирован для администратора!</b>\n\n"
-            "✅ Доступ бессрочный\n"
-            "📅 Никогда не истекает\n\n"
-            "🔑 Ты — главный!",
-            parse_mode=ParseMode.HTML
-        )
+        # Отправляем конфиг
+        try:
+            config_file = FSInputFile("configs/trial.json", filename="derox_vpn_trial.json")
+            await callback.message.answer_document(
+                document=config_file,
+                caption=f"👑 <b>Админский пробный период активирован!</b>\n\n"
+                        f"✅ Доступ на <b>3 дня</b>\n"
+                        f"📅 Активен до: <b>{(now + timedelta(days=3)).strftime('%d.%m.%Y %H:%M')}</b>\n\n"
+                        f"📥 Скачайте файл и импортируйте в VPN.\n"
+                        f"🔄 Можно активировать снова в любой момент.",
+                parse_mode=ParseMode.HTML
+            )
+        except FileNotFoundError:
+            await callback.message.answer("❌ Ошибка: файл конфига не найден.")
+
         await callback.answer()
         return
 
     # ⬇️ ОБЫЧНАЯ ЛОГИКА ДЛЯ ВСЕХ ОСТАЛЬНЫХ ПОЛЬЗОВАТЕЛЕЙ
-
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
 
     if user and user.time_sub and user.time_sub > now:
@@ -174,7 +181,7 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
 
 
 # ============================================
-# ПОЛУЧИТЬ КОНФИГ (для админа тоже)
+# ПОЛУЧИТЬ КОНФИГ (для админа отдельно)
 # ============================================
 @router.callback_query(lambda c: c.data == "get_config")
 async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
@@ -184,38 +191,52 @@ async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
 
     user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
 
-    if not user or not user.time_sub or user.time_sub <= now:
-        # Проверяем, может быть это админ с вечным доступом?
-        if username and username.lower() == ADMIN_USERNAME.lower():
-            # Если админ, но в БД нет записи — создаём
-            if not user:
-                user = Users(user_id=user_id, fullname=callback.from_user.full_name)
-                session.add(user)
-                user.time_sub = now + timedelta(days=365 * 100)
-                user.tariff = "👑 Вечный админский доступ"
-                user.trial_used = True
-                await session.commit()
-            else:
-                await callback.message.answer(
-                    "❌ У вас нет активной подписки.\n\nОформите подписку в меню «Подписка».",
-                    parse_mode=ParseMode.HTML
-                )
-                await callback.answer()
-                return
-        else:
-            await callback.message.answer(
-                "❌ У вас нет активной подписки.\n\nОформите подписку в меню «Подписка».",
+    # Если админ — даём конфиг даже без подписки
+    if username and username.lower() == ADMIN_USERNAME.lower():
+        if not user:
+            user = Users(user_id=user_id, fullname=callback.from_user.full_name)
+            session.add(user)
+            user.time_sub = now + timedelta(days=3)
+            user.tariff = "👑 Админ (пробный)"
+            user.trial_used = False
+            await session.commit()
+
+        # Если у админа истекло — продлеваем на 3 дня
+        if not user.time_sub or user.time_sub <= now:
+            user.time_sub = now + timedelta(days=3)
+            user.tariff = "👑 Админ (продлен)"
+            await session.commit()
+
+        try:
+            config_file = FSInputFile("configs/trial.json", filename=f"derox_vpn_admin.json")
+            await callback.message.answer_document(
+                document=config_file,
+                caption=f"👑 <b>Админский конфиг</b>\n\n"
+                        f"📦 Тариф: {user.tariff}\n"
+                        f"📅 Активен до: <b>{user.time_sub.strftime('%d.%m.%Y %H:%M')}</b>\n\n"
+                        f"🔄 Можно обновить в любой момент.",
                 parse_mode=ParseMode.HTML
             )
-            await callback.answer()
-            return
+        except FileNotFoundError:
+            await callback.message.answer("❌ Ошибка: файл конфига не найден.")
+
+        await callback.answer()
+        return
+
+    # ⬇️ ОБЫЧНАЯ ЛОГИКА ДЛЯ ВСЕХ ОСТАЛЬНЫХ
+    if not user or not user.time_sub or user.time_sub <= now:
+        await callback.message.answer(
+            "❌ У вас нет активной подписки.\n\nОформите подписку в меню «Подписка».",
+            parse_mode=ParseMode.HTML
+        )
+        await callback.answer()
+        return
 
     tariff_map = {
         "🌙 1 месяц": "month.json",
         "🌕 6 месяцев": "sixmonth.json",
         "🌚 1 год": "year.json",
-        "Пробный (3 дня)": "trial.json",
-        "👑 Вечный админский доступ": "trial.json"
+        "Пробный (3 дня)": "trial.json"
     }
 
     filename = tariff_map.get(user.tariff, "trial.json")
@@ -226,7 +247,7 @@ async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
             document=config_file,
             caption=f"🔑 <b>Ваш конфиг</b>\n\n"
                     f"📦 Тариф: {user.tariff}\n"
-                    f"📅 Активен до: <b>{user.time_sub.strftime('%d.%m.%Y %H:%M') if user.time_sub else 'Бессрочно'}</b>",
+                    f"📅 Активен до: <b>{user.time_sub.strftime('%d.%m.%Y %H:%M') if user.time_sub else 'Не указано'}</b>",
             parse_mode=ParseMode.HTML
         )
     except FileNotFoundError:
