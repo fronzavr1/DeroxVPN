@@ -40,7 +40,7 @@ async def main():
 
     print("=== ШАГ 5: Инициализация тарифов ===", flush=True)
     async with async_session() as session:
-        await tariff_router.init_tariffs(session)  # <-- ИСПРАВЛЕНО!
+        await tariff_router.init_tariffs(session)
     print("=== ШАГ 6: Тарифы инициализированы ===", flush=True)
 
     try:
