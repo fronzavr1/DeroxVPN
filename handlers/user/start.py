@@ -9,7 +9,7 @@ from datetime import datetime
 from db.models import Users, Stats
 from filters.is_private import PrivateChatFilter
 
-router = Router()  # <-- ЭТО БЫЛО ПРОПУЩЕНО!
+router = Router()
 
 # 👇 ТВОЙ ЮЗЕРНЕЙМ (без @)
 ADMIN_USERNAME = "DeroXHelper"
@@ -77,10 +77,10 @@ async def profile_handler(message: Message, session: AsyncSession):
     
     now = datetime.now()
     
-    # Если это админ — показываем вечную подписку
+    # Если это админ
     if username and username.lower() == ADMIN_USERNAME.lower():
-        sub_status = "👑 Вечный доступ (админ)"
-        tariff_info = "📦 Тариф: Администратор"
+        sub_status = "👑 Администратор"
+        tariff_info = "📦 Тариф: Админский доступ"
         if user and user.time_sub:
             sub_status = f"👑 Активен до: {user.time_sub.strftime('%d.%m.%Y %H:%M')}"
         
