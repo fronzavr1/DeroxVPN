@@ -13,7 +13,7 @@ from db.models import Users
 router = Router()
 MSK = pytz.timezone('Europe/Moscow')
 
-# 👇 ТВОЙ ЮЗЕРНЕЙМ (без @)
+# 👇 ТВОЙ ЮЗЕРНЕЙМ (без @) — КТО МОЖЕТ БРАТЬ ПРОБНИК БЕСКОНЕЧНО
 ADMIN_USERNAME = "DeroXHelper"
 
 
@@ -22,7 +22,7 @@ def now_moscow():
 
 
 # ============================================
-# ПРОБНЫЙ ПЕРИОД (для админа — бесконечно, 3 дня каждый раз)
+# ПРОБНЫЙ ПЕРИОД
 # ============================================
 @router.callback_query(lambda c: c.data == "free_trial")
 async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
@@ -30,17 +30,17 @@ async def free_trial_handler(callback: CallbackQuery, session: AsyncSession):
     username = callback.from_user.username
     now = now_moscow()
 
-    # ⭐ ЕСЛИ ЭТО АДМИН — ДАЁМ 3 ДНЯ, НО БЕЗ ОГРАНИЧЕНИЙ
+    # ⭐ ЕСЛИ ЭТО АДМИН — ДАЁМ 3 ДНЯ БЕЗ ОГРАНИЧЕНИЙ (сколько угодно раз)
     if username and username.lower() == ADMIN_USERNAME.lower():
         user = (await session.execute(select(Users).where(Users.user_id == user_id))).scalar_one_or_none()
         if not user:
             user = Users(user_id=user_id, fullname=callback.from_user.full_name)
             session.add(user)
 
-        # Даём 3 дня (каждый раз заново, без проверок)
+        # Каждый раз даём свежие 3 дня
         user.time_sub = now + timedelta(days=3)
         user.tariff = "👑 Админ (пробный 3 дня)"
-        user.trial_used = False  # Чтобы всегда мог брать снова
+        user.trial_used = False  # Чтобы можно было брать снова и снова
         await session.commit()
 
         # Отправляем конфиг
@@ -181,7 +181,7 @@ async def successful_payment_handler(message: Message, session: AsyncSession):
 
 
 # ============================================
-# ПОЛУЧИТЬ КОНФИГ (для админа отдельно)
+# ПОЛУЧИТЬ КОНФИГ (для админа — всегда работает)
 # ============================================
 @router.callback_query(lambda c: c.data == "get_config")
 async def get_config_handler(callback: CallbackQuery, session: AsyncSession):
